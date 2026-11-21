@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predictive Maintenance Hub</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-900 text-white flex flex-col hidden md:flex shrink-0">
+        <div class="p-6 flex items-center gap-3 border-b border-slate-700">
+            <i class="fa-solid fa-house-chimney-medical text-blue-400 text-2xl"></i>
+            <h1 class="text-xl font-bold tracking-tight">Hub<span class="text-blue-400">PM</span></h1>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="navigate('dashboard')" id="nav-dashboard" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600 text-white transition-colors">
+                <i class="fa-solid fa-chart-line w-5"></i> Dashboard
+            </button>
+            <button onclick="navigate('assets')" id="nav-assets" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                <i class="fa-solid fa-server w-5"></i> Asset Registry
+            </button>
+            <button onclick="navigate('schedule')" id="nav-schedule" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                <i class="fa-solid fa-calendar-check w-5"></i> Schedule Engine
+            </button>
+            <button onclick="navigate('finances')" id="nav-finances" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                <i class="fa-solid fa-file-invoice-dollar w-5"></i> Expense Ledger
+            </button>
+        </nav>
+        <div class="p-4 border-t border-slate-700">
+            <div class="bg-slate-800 rounded-lg p-4 text-sm">
+                <p class="text-slate-400 mb-2">Home Health Score</p>
+                <div class="flex items-end gap-2">
+                    <span class="text-2xl font-bold text-emerald-400" id="global-health-score">82%</span>
+                    <span class="text-xs text-slate-400 mb-1">Optimal</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-1.5 mt-2">
+                    <div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-500" id="global-health-bar" style="width: 82%"></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+        <!-- Top Header -->
+        <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-4">
+                <button class="md:hidden text-slate-500 hover:text-slate-700">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <h2 class="text-xl font-semibold text-slate-800" id="page-title">Dashboard Overview</h2>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">
+                    JD
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Container -->
+        <div id="app-content" class="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 fade-in">
+            <!-- Content injected via JS -->
+        </div>
+    </main>
+
+    <script>
+        // --- Data Models & State ---
+        const state = {
+            currentView: 'dashboard',
+            chartInstance: null,
+            assets: [
+                { id: 1, name: 'HVAC System', category: 'Climate', age: 8, lifespan: 15, health: 65, icon: 'fa-fan' },
+                { id: 2, name: 'Water Heater', category: 'Plumbing', age: 4, lifespan: 10, health: 85, icon: 'fa-droplet' },
+                { id: 3, name: 'Asphalt Roof', category: 'Exterior', age: 12, lifespan: 20, health: 45, icon: 'fa-house' },
+                { id: 4, name: 'Sump Pump', category: 'Plumbing', age: 6, lifespan: 10, health: 70, icon: 'fa-water' },
+                { id: 5, name: 'Refrigerator', category: 'Appliance', age: 3, lifespan: 12, health: 90, icon: 'fa-snowflake' }
+            ],
+            tasks: [
+                { id: 101, assetId: 1, title: 'Replace HVAC Filter', trigger: 'Time (90 Days)', type: 'time', status: 'due', cost: 25 },
+                { id: 102, assetId: 1, title: 'Condenser Coil Cleaning', trigger: 'High Runtime Hours', type: 'usage', status: 'upcoming', cost: 0 },
+                { id: 103, assetId: 4, title: 'Test Float Switch', trigger: 'Heavy Rainfall Alert', type: 'weather', status: 'due', cost: 0 },
+                { id: 104, assetId: 2, title: 'Tank Flushing & Anode Check', trigger: 'Time (12 Months)', type: 'time', status: 'upcoming', cost: 15 }
+            ],
+            expenses: [
+                { id: 1, date: '2026-10-15', asset: 'HVAC System', category: 'Preventive', description: 'Filter Replacement', amount: 25 },
+                { id: 2, date: '2026-08-22', asset: 'Refrigerator', category: 'Preventive', description: 'Coil Vacuuming', amount: 0 },
+                { id: 3, date: '2026-05-10', asset: 'Water Heater', category: 'Emergency', description: 'Leaking Valve Repair', amount: 350 },
+                { id: 4, date: '2026-02-14', asset: 'Asphalt Roof', category: 'Preventive', description: 'Moss Treatment', amount: 120 }
+            ]
+        };
+
+        // --- Core Application Logic ---
+        
+        function updateGlobalHealth() {
+            const avgHealth = Math.round(state.assets.reduce((sum, a) => sum + a.health, 0) / state.assets.length);
+            document.getElementById('global-health-score').innerText = `${avgHealth}%`;
+            document.getElementById('global-health-bar').style.width = `${avgHealth}%`;
+            
+            const bar = document.getElementById('global-health-bar');
+            bar.className = `h-1.5 rounded-full transition-all duration-500 ${getHealthColorClass(avgHealth, 'bg')}`;
+        }
+
+        function getHealthColorClass(score, type = 'text') {
+            if (score >= 75) return `${type}-emerald-500`;
+            if (score >= 50) return `${type}-amber-500`;
+            return `${type}-red-500`;
+        }
+
+        function navigate(view) {
+            state.currentView = view;
+            
+            // Update Sidebar UI
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.className = 'nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors';
+            });
+            const activeBtn = document.getElementById(`nav-${view}`);
+            activeBtn.className = 'nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600 text-white transition-colors';
+
+            // Titles
+            const titles = {
+                'dashboard': 'Dashboard Overview',
+                'assets': 'Smart Asset Registry',
+                'schedule': 'Predictive Scheduling Engine',
+                'finances': 'Expense Ledger & Analytics'
+            };
+            document.getElementById('page-title').innerText = titles[view];
+
+            // Render View
+            const contentDiv = document.getElementById('app-content');
+            contentDiv.innerHTML = ''; 
+            contentDiv.classList.remove('fade-in');
+            void contentDiv.offsetWidth; // Trigger reflow to restart animation
+            contentDiv.classList.add('fade-in');
+
+            if (state.chartInstance) {
+                state.chartInstance.destroy();
+                state.chartInstance = null;
+            }
+
+            switch(view) {
+                case 'dashboard': renderDashboard(); break;
+                case 'assets': renderAssets(); break;
+                case 'schedule': renderSchedule(); break;
+                case 'finances': renderFinances(); break;
+            }
+        }
+
+        function completeTask(taskId) {
+            const taskIndex = state.tasks.findIndex(t => t.id === taskId);
+            if(taskIndex > -1) {
+                const task = state.tasks[taskIndex];
+                const asset = state.assets.find(a => a.id === task.assetId);
+                
+                // Add to expenses
+                if(task.cost > 0 || task.cost === 0) {
+                    state.expenses.unshift({
+                        id: Date.now(),
+                        date: new Date().toISOString().split('T')[0],
+                        asset: asset.name,
+                        category: 'Preventive',
+                        description: task.title,
+                        amount: task.cost
+                    });
+                }
+
+                // Boost asset health
+                if(asset) {
+                    asset.health = Math.min(100, asset.health + 15);
+                }
+
+                // Remove task from 'due' status (for simplicity, we'll remove it from the array)
+                state.tasks.splice(taskIndex, 1);
+                
+                updateGlobalHealth();
+                navigate(state.currentView); // Re-render current view
+            }
+        }
+
+        // --- Render Functions ---
+
+        function renderDashboard() {
+            const content = document.getElementById('app-content');
+            
+            const dueTasksCount = state.tasks.filter(t => t.status === 'due').length;
+            const totalAssets = state.assets.length;
+            const ytdExpenses = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+            content.innerHTML = `
+                <!-- Top Metric Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+                    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center text-red-600 text-xl shrink-0">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500 font-medium">Action Required</p>
+                            <p class="text-2xl font-bold text-slate-800">${dueTasksCount} Tasks Due</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 text-xl shrink-0">
+                            <i class="fa-solid fa-server"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500 font-medium">Tracked Assets</p>
+                            <p class="text-2xl font-bold text-slate-800">${totalAssets} Systems</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-xl shrink-0">
+                            <i class="fa-solid fa-dollar-sign"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500 font-medium">YTD Maintenance Costs</p>
+                            <p class="text-2xl font-bold text-slate-800">$${ytdExpenses}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+                    <!-- Chart Section -->
+                    <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+                            <h3 class="text-lg font-bold text-slate-800">Reactive vs Proactive Cost Projection</h3>
+                            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium">5-Year Outlook</span>
+                        </div>
+                        <div class="relative w-full h-64 md:h-80">
+                            <canvas id="dashboardChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Action Center -->
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col">
+                        <h3 class="text-lg font-bold text-slate-800 mb-6">Urgent Actions</h3>
+                        <div class="space-y-4 flex-1 overflow-y-auto pr-2">
+                            ${state.tasks.filter(t => t.status === 'due').map(task => {
+                                const asset = state.assets.find(a => a.id === task.assetId);
+                                return `
+                                <div class="p-4 rounded-lg border border-red-200 bg-red-50 flex flex-col gap-3">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h4 class="font-semibold text-slate-800 text-sm">${task.title}</h4>
+                                            <p class="text-xs text-slate-500 mt-1">${asset.name} • ${task.trigger}</p>
+                                        </div>
+                                        <i class="${getIconForTrigger(task.type)} text-red-500 mt-1"></i>
+                                    </div>
+                                    <button onclick="completeTask(${task.id})" class="w-full py-2 bg-white border border-red-200 text-red-600 rounded text-sm font-medium hover:bg-red-50 transition-colors">
+                                        Mark Completed (Log $${task.cost})
+                                    </button>
+                                </div>
+                                `;
+                            }).join('')}
+                            ${state.tasks.filter(t => t.status === 'due').length === 0 ? `
+                                <div class="flex flex-col items-center justify-center h-full text-slate-400 py-10">
+                                    <i class="fa-solid fa-check-circle text-4xl mb-3 text-emerald-400"></i>
+                                    <p class="text-sm text-center">All caught up! Your home is running optimally.</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Initialize Chart
+            const ctx = document.getElementById('dashboardChart').getContext('2d');
+            state.chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
+                    datasets: [
+                        {
+                            label: 'Proactive Maintenance',
+                            data: [300, 250, 400, 300, 450],
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Reactive (Emergencies)',
+                            data: [150, 1200, 200, 4500, 250],
+                            backgroundColor: '#94a3b8',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { 
+                        legend: { position: 'bottom' } 
+                    }
+                }
+            });
+        }
+
+        function renderAssets() {
+            const content = document.getElementById('app-content');
+            
+            let gridHTML = state.assets.map(asset => `
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 text-xl">
+                            <i class="fa-solid ${asset.icon}"></i>
+                        </div>
+                        <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-semibold uppercase tracking-wider">${asset.category}</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-800">${asset.name}</h3>
+                    <p class="text-sm text-slate-500 mb-6">Age: ${asset.age} / ${asset.lifespan} Years</p>
+                    
+                    <div class="mb-2 flex justify-between items-end">
+                        <span class="text-xs font-semibold text-slate-600">Health Score</span>
+                        <span class="text-sm font-bold ${getHealthColorClass(asset.health)}">${asset.health}%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mb-4">
+                        <div class="${getHealthColorClass(asset.health, 'bg')} h-2 rounded-full transition-all duration-1000" style="width: ${asset.health}%"></div>
+                    </div>
+                    <button class="w-full py-2 bg-slate-50 border border-slate-200 text-slate-600 rounded text-sm font-medium hover:bg-slate-100 transition-colors">
+                        View Digital Twin
+                    </button>
+                </div>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <p class="text-slate-500 max-w-xl">Manage and monitor the degradation of your home's infrastructure. Health scores reflect age, maintenance history, and usage.</p>
+                    <button class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shrink-0">
+                        <i class="fa-solid fa-plus mr-2"></i> Add Asset
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    ${gridHTML}
+                </div>
+            `;
+        }
+
+        function renderSchedule() {
+            const content = document.getElementById('app-content');
+            
+            let listHTML = state.tasks.map(task => {
+                const asset = state.assets.find(a => a.id === task.assetId);
+                const isDue = task.status === 'due';
+                const statusColor = isDue ? 'bg-red-100 text-red-700 border-red-200' : 'bg-amber-100 text-amber-700 border-amber-200';
+                const badgeText = isDue ? 'Action Required' : 'Upcoming';
+
+                return `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-white border border-slate-200 rounded-xl shadow-sm mb-4 gap-4">
+                    <div class="flex items-start sm:items-center gap-4 sm:gap-5">
+                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                            <i class="${getIconForTrigger(task.type)}"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-3 mb-1">
+                                <h4 class="text-base font-bold text-slate-800">${task.title}</h4>
+                                <span class="sm:hidden px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusColor}">
+                                    ${badgeText}
+                                </span>
+                            </div>
+                            <p class="text-sm text-slate-500">${asset.name} • <span class="font-medium text-slate-600">${task.trigger}</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                        <span class="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold border ${statusColor}">
+                            ${badgeText}
+                        </span>
+                        ${isDue 
+                            ? `<button onclick="completeTask(${task.id})" class="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">Log Done ($${task.cost})</button>` 
+                            : `<button class="w-full sm:w-auto px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">Details</button>`}
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            if(state.tasks.length === 0) {
+                listHTML = `
+                    <div class="bg-white rounded-xl border border-slate-200 p-10 text-center">
+                        <i class="fa-solid fa-calendar-check text-4xl text-slate-300 mb-4"></i>
+                        <h4 class="text-lg font-bold text-slate-800">No scheduled tasks</h4>
+                        <p class="text-slate-500 mt-1">Your predictive engine hasn't triggered any upcoming maintenance.</p>
+                    </div>
+                `;
+            }
+
+            content.innerHTML = `
+                <div class="mb-6 max-w-4xl">
+                    <h3 class="text-lg font-bold text-slate-800 mb-2">Dynamic Triggers</h3>
+                    <p class="text-slate-500 text-sm">Tasks are generated dynamically based on time intervals, usage hours (cycle tracking), and live weather API integrations.</p>
+                </div>
+                <div class="max-w-4xl">
+                    ${listHTML}
+                </div>
+            `;
+        }
+
+        function renderFinances() {
+            const content = document.getElementById('app-content');
+            
+            let rowsHTML = state.expenses.map(exp => `
+                <tr class="border-b border-slate-100 hover:bg-slate-50">
+                    <td class="py-4 px-4 text-sm text-slate-500 whitespace-nowrap">${exp.date}</td>
+                    <td class="py-4 px-4">
+                        <p class="text-sm font-bold text-slate-800">${exp.description}</p>
+                        <p class="text-xs text-slate-500">${exp.asset}</p>
+                    </td>
+                    <td class="py-4 px-4 whitespace-nowrap">
+                        <span class="px-2 py-1 rounded text-xs font-semibold ${exp.category === 'Preventive' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">
+                            ${exp.category}
+                        </span>
+                    </td>
+                    <td class="py-4 px-4 text-right text-sm font-bold text-slate-800 whitespace-nowrap">$${exp.amount.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="max-w-5xl">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-4">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800">Maintenance Ledger</h3>
+                            <p class="text-slate-500 text-sm mt-1">Track all DIY parts, professional labor, and emergency repair costs.</p>
+                        </div>
+                        <button class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 bg-white shadow-sm transition-colors">
+                            <i class="fa-solid fa-file-export mr-2"></i> Export CSV
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-[600px]">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200">
+                                    <th class="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                                    <th class="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Item & Asset</th>
+                                    <th class="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                                    <th class="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHTML}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Utilities & Initialization ---
+
+        function getIconForTrigger(type) {
+            switch(type) {
+                case 'time': return 'fa-solid fa-hourglass-half';
+                case 'usage': return 'fa-solid fa-gauge-high';
+                case 'weather': return 'fa-solid fa-cloud-bolt';
+                default: return 'fa-solid fa-wrench';
+            }
+        }
+
+        // Initialize App
+        updateGlobalHealth();
+        navigate('dashboard');
+
+    </script>
+</body>
+</html>
